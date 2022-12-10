@@ -1,4 +1,4 @@
-use crate::{flow::Flow, packet::Packet};
+use crate::scheduling::{flow::Flow, packet::Packet};
 
 #[derive(Debug)]
 pub struct OutputLink {
@@ -108,8 +108,10 @@ impl DRRScheduler {
 
 #[cfg(test)]
 mod test {
-    use crate::schedulers::ddr::DRRScheduler;
-    use crate::*;
+    use crate::{
+        scheduling::{flow, packet, schedulers::drr::DRRScheduler},
+        *,
+    };
 
     #[test]
     fn ddr_test() {

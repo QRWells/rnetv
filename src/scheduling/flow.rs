@@ -1,4 +1,4 @@
-use crate::packet::Packet;
+use crate::scheduling::packet::Packet;
 
 #[derive(Debug)]
 pub struct Flow {

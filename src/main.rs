@@ -15,9 +15,7 @@ use tui::{
     Terminal,
 };
 
-mod flow;
-mod packet;
-mod schedulers;
+mod scheduling;
 
 fn main() -> Result<(), io::Error> {
     enable_raw_mode()?;
