@@ -1,2 +1,2 @@
-pub mod ddr;
+pub mod drr;
 pub mod wfq;

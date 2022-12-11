@@ -1,30 +1,54 @@
-use crate::scheduling::packet::Packet;
+use crate::scheduling::Packet;
 
-#[derive(Debug)]
-pub struct Flow {
-    pub packets: Vec<Packet>,
+pub trait Flow {
+    /// Add a packet to the flow.
+    fn packet_arrive(&mut self, packet: Packet, time: usize);
+
+    /// Pop a packet from the flow.
+    fn pop_packet(&mut self) -> Packet;
+
+    /// Peek at the next packet in the flow at a given time.
+    /// If there is no packet available, return None.
+    fn peek_packet(&self, time: usize) -> Option<Packet>;
+
+    /// Check if the flow is empty.
+    fn empty(&self) -> bool;
 }
 
-impl Flow {
-    pub fn new() -> Flow {
-        Flow {
-            packets: Vec::new(),
+/// A flow with variable-length packets.
+#[derive(Debug)]
+pub struct VariableLengthFlow {
+    pub packet_states: Vec<(Packet, usize)>,
+}
+
+/// A flow with fixed-length packets.
+#[derive(Debug)]
+pub struct FixedLengthFlow {
+    pub packet_len: usize,
+    pub packet_states: Vec<(Packet, usize)>,
+}
+
+impl VariableLengthFlow {
+    pub fn new() -> VariableLengthFlow {
+        VariableLengthFlow {
+            packet_states: Vec::new(),
         }
     }
+}
 
-    pub fn add_packet(&mut self, packet: Packet) {
-        self.packets.push(packet);
-        self.packets
-            .sort_by(|a, b| a.arrival_time.cmp(&b.arrival_time));
+impl Flow for VariableLengthFlow {
+    fn packet_arrive(&mut self, packet: Packet, time: usize) {
+        self.packet_states.push((packet, time));
+        self.packet_states.sort_by(|a, b| a.1.cmp(&b.1));
     }
 
-    pub fn pop_packet(&mut self) -> Packet {
-        self.packets.remove(0)
+    fn pop_packet(&mut self) -> Packet {
+        self.packet_states.remove(0).0
     }
 
-    pub fn peek_packet(&self, time: usize) -> Option<Packet> {
-        if let Some(packet) = self.packets.first() {
-            if packet.arrival_time <= time {
+    fn peek_packet(&self, time: usize) -> Option<Packet> {
+        if let Some((packet, arrive_time)) = self.packet_states.first() {
+            if arrive_time <= &time {
                 Some(packet.clone())
             } else {
                 None
@@ -34,8 +58,58 @@ impl Flow {
         }
     }
 
-    pub fn empty(&self) -> bool {
-        self.packets.len() == 0
+    fn empty(&self) -> bool {
+        self.packet_states.len() == 0
+    }
+}
+
+impl FixedLengthFlow {
+    /// Create a new flow with fixed-length packets.
+    pub fn new(packet_len: usize) -> FixedLengthFlow {
+        FixedLengthFlow {
+            packet_len,
+            packet_states: Vec::new(),
+        }
+    }
+}
+
+impl Flow for FixedLengthFlow {
+    /// Add a packet to the flow.
+    ///
+    /// If the packet length is different from the flow's packet length,
+    /// the packet will be resized to the flow's packet length.
+    fn packet_arrive(&mut self, packet: Packet, time: usize) {
+        if packet.len != self.packet_len {
+            let packet = Packet {
+                len: self.packet_len,
+                ..packet
+            };
+            self.packet_states.push((packet, time));
+            self.packet_states.sort_by(|a, b| a.1.cmp(&b.1));
+        } else {
+            self.packet_states.push((packet, time));
+            self.packet_states.sort_by(|a, b| a.1.cmp(&b.1));
+        }
+    }
+
+    fn pop_packet(&mut self) -> Packet {
+        self.packet_states.remove(0).0
+    }
+
+    fn peek_packet(&self, time: usize) -> Option<Packet> {
+        if let Some((packet, arrive_time)) = self.packet_states.first() {
+            if arrive_time <= &time {
+                Some(packet.clone())
+            } else {
+                None
+            }
+        } else {
+            None
+        }
+    }
+
+    fn empty(&self) -> bool {
+        self.packet_states.len() == 0
     }
 }
 
@@ -45,10 +119,10 @@ mod test {
 
     #[test]
     fn flow_test() {
-        let mut flow = Flow::new();
+        let mut flow = VariableLengthFlow::new();
         assert!(flow.empty());
 
-        flow.add_packet(Packet::new(0, 10, 0));
+        flow.packet_arrive(Packet::new("test", 10), 0);
         assert!(!flow.empty());
         assert!(flow.peek_packet(0).is_some());
     }

@@ -1,36 +1,15 @@
-use crate::scheduling::{flow::Flow, packet::Packet};
-
-#[derive(Debug)]
-pub struct OutputLink {
-    capacity: usize,
-    current_load: usize,
-    history: Vec<(usize, usize)>,
-}
-
-impl OutputLink {
-    pub fn add(&mut self, flow: usize, packet: &Packet) {
-        self.current_load += packet.len;
-        self.history.push((flow, packet.index));
-    }
-
-    pub fn tick(&mut self) {
-        if self.current_load >= self.capacity {
-            self.current_load -= self.capacity;
-        }
-    }
-
-    pub fn empty(&self) -> bool {
-        self.current_load == 0
-    }
-}
+use crate::scheduling::{
+    flow::{Flow, VariableLengthFlow},
+    Port, Scheduler, Tickable,
+};
 
 #[derive(Debug)]
 pub struct DRRScheduler {
     timer: usize,
-    flows: Vec<Flow>,
+    flows: Vec<VariableLengthFlow>,
     weights: Vec<usize>,
     deficit_counters: Vec<usize>,
-    output_link: OutputLink,
+    output_port: Port,
 }
 
 impl DRRScheduler {
@@ -40,45 +19,34 @@ impl DRRScheduler {
             flows: Vec::new(),
             weights: Vec::new(),
             deficit_counters: Vec::new(),
-            output_link: OutputLink {
-                capacity,
-                current_load: 0,
-                history: Vec::new(),
-            },
+            output_port: Port::new(0, capacity),
         }
     }
 
-    pub fn add_flow(&mut self, flow: Flow, weight: usize) {
+    pub fn add_flow(&mut self, flow: VariableLengthFlow, weight: usize) {
         self.flows.push(flow);
         self.weights.push(weight);
         self.deficit_counters.push(weight);
     }
 
-    fn schedule(&mut self) -> bool {
-        if !self.output_link.empty() {
-            return false;
-        }
-        for i in 0..self.flows.len() {
-            if let Some(p) = self.flows[i].peek_packet(self.timer) {
-                if self.deficit_counters[i] >= p.len {
-                    self.deficit_counters[i] -= p.len;
-                    self.output_link.add(i, &p);
-                    self.flows[i].pop_packet();
-                }
-            } else {
-                self.deficit_counters[i] = 0;
-            }
-        }
-        true
+    pub fn run(&mut self) {
+        while self.tick() {}
+        self.output_port.proceed_rest();
     }
 
-    pub fn tick(&mut self) -> bool {
+    pub fn get_output_port(&mut self) -> &mut Port {
+        &mut self.output_port
+    }
+}
+
+impl Tickable for DRRScheduler {
+    fn tick(&mut self) -> bool {
         if self.flows.iter().all(|f| f.empty()) {
             return false;
         }
         self.timer += 1;
-        self.output_link.tick();
-        if !self.output_link.empty() {
+        self.output_port.tick();
+        if !self.output_port.empty() {
             return true;
         }
 
@@ -96,49 +64,72 @@ impl DRRScheduler {
 
         true
     }
+}
 
-    pub fn run(&mut self) {
-        while self.tick() {}
-    }
-
-    pub fn get_history(&self) -> &Vec<(usize, usize)> {
-        &self.output_link.history
+impl Scheduler for DRRScheduler {
+    fn schedule(&mut self) -> bool {
+        if !self.output_port.empty() {
+            return false;
+        }
+        for i in 0..self.flows.len() {
+            if let Some(p) = self.flows[i].peek_packet(self.timer) {
+                if self.deficit_counters[i] >= p.len {
+                    self.deficit_counters[i] -= p.len;
+                    self.output_port.submit(p);
+                    self.flows[i].pop_packet();
+                }
+            } else {
+                self.deficit_counters[i] = 0;
+            }
+        }
+        true
     }
 }
 
 #[cfg(test)]
 mod test {
-    use crate::{
-        scheduling::{flow, packet, schedulers::drr::DRRScheduler},
-        *,
+    use crate::scheduling::{
+        flow::{self, Flow},
+        schedulers::drr::DRRScheduler,
+        Packet,
     };
 
     #[test]
     fn ddr_test() {
         let mut scheduler = DRRScheduler::new(1);
 
-        let mut flow = flow::Flow::new();
-        flow.add_packet(packet::Packet::new(0, 3, 0));
-        flow.add_packet(packet::Packet::new(1, 4, 8));
+        let mut flow = flow::VariableLengthFlow::new();
+        flow.packet_arrive(Packet::new("1_1", 3), 0);
+        flow.packet_arrive(Packet::new("1_2", 4), 8);
         scheduler.add_flow(flow, 3);
 
-        let mut flow = flow::Flow::new();
-        flow.add_packet(packet::Packet::new(0, 3, 0));
-        flow.add_packet(packet::Packet::new(1, 1, 12));
+        let mut flow = flow::VariableLengthFlow::new();
+        flow.packet_arrive(Packet::new("2_1", 3), 0);
+        flow.packet_arrive(Packet::new("2_2", 1), 12);
         scheduler.add_flow(flow, 2);
 
-        let mut flow = flow::Flow::new();
-        flow.add_packet(packet::Packet::new(0, 6, 0));
-        flow.add_packet(packet::Packet::new(1, 1, 11));
+        let mut flow = flow::VariableLengthFlow::new();
+        flow.packet_arrive(Packet::new("3_1", 6), 0);
+        flow.packet_arrive(Packet::new("3_2", 1), 11);
         scheduler.add_flow(flow, 5);
 
         scheduler.run();
 
         assert_eq!(scheduler.timer, 15);
-        assert_eq!(scheduler.get_history().len(), 6);
+
+        let output = scheduler.get_output_port().get_output();
+
+        assert_eq!(output.len(), 6);
         assert_eq!(
-            scheduler.get_history(),
-            &vec![(0, 0), (1, 0), (2, 0), (1, 1), (2, 1), (0, 1),]
+            output,
+            &vec![
+                Packet::new("1_1", 3),
+                Packet::new("2_1", 3),
+                Packet::new("3_1", 6),
+                Packet::new("2_2", 1),
+                Packet::new("3_2", 1),
+                Packet::new("1_2", 4)
+            ]
         );
     }
 }
