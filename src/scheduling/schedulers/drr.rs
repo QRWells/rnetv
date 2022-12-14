@@ -1,8 +1,9 @@
 use crate::scheduling::{
     flow::{Flow, VariableLengthFlow},
-    Port, Scheduler, Tickable,
+    Port, Schedulable, Tickable,
 };
 
+/// Deficit Round Robin (DRR) scheduler.
 #[derive(Debug)]
 pub struct DRRScheduler {
     timer: usize,
@@ -66,7 +67,7 @@ impl Tickable for DRRScheduler {
     }
 }
 
-impl Scheduler for DRRScheduler {
+impl Schedulable<bool> for DRRScheduler {
     fn schedule(&mut self) -> bool {
         if !self.output_port.empty() {
             return false;
@@ -117,7 +118,7 @@ mod test {
 
         assert_eq!(scheduler.timer, 15);
 
-        let output = scheduler.get_output_port().get_output();
+        let output = scheduler.output_port.get_output();
 
         assert_eq!(output.len(), 6);
         assert_eq!(
