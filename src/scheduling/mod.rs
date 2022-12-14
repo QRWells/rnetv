@@ -7,8 +7,8 @@ trait Tickable {
     fn tick(&mut self) -> bool;
 }
 
-trait Scheduler: Tickable {
-    fn schedule(&mut self) -> bool;
+trait Schedulable<T>: Tickable {
+    fn schedule(&mut self) -> T;
 }
 
 #[derive(Debug)]
@@ -50,6 +50,10 @@ impl Port {
             self.out_queue.push(self.in_queue.remove(0));
         }
         self.current_processed = 0;
+    }
+
+    pub fn get_bandwidth(&self) -> usize {
+        self.rate
     }
 }
 
