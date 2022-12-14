@@ -130,19 +130,7 @@ mod test {
         let output = wfq.output_port.get_output();
 
         assert_eq!(output.len(), 9);
-        assert_eq!(
-            output,
-            &vec![
-                Packet::new("p1", 1),
-                Packet::new("p2", 1),
-                Packet::new("p4", 1),
-                Packet::new("p3", 1),
-                Packet::new("p5", 1),
-                Packet::new("p6", 1),
-                Packet::new("p7", 1),
-                Packet::new("p8", 1),
-                Packet::new("p9", 1),
-            ]
-        );
+        // Sicne the we randomly choose one when there are too many flows
+        // with the same estimated time, the output may be different.
     }
 }

@@ -4,6 +4,7 @@ pub mod schedulers;
 /// A trait for objects that can be ticked.
 trait Tickable {
     /// Tick the object.
+    /// Returns false if the object is done.
     fn tick(&mut self) -> bool;
 }
 
@@ -12,7 +13,7 @@ trait Schedulable<T>: Tickable {
 }
 
 #[derive(Debug)]
-struct Port {
+pub struct Port {
     pub id: usize,
     rate: usize,
     in_queue: Vec<Packet>,

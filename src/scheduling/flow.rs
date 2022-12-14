@@ -71,6 +71,27 @@ impl FixedLengthFlow {
             packet_states: Vec::new(),
         }
     }
+
+    fn ensure_packet_len(&mut self, packet: Packet) -> Packet {
+        if packet.len != self.packet_len {
+            Packet {
+                len: self.packet_len,
+                ..packet
+            }
+        } else {
+            packet
+        }
+    }
+
+    fn ensure_packet_order(&mut self) {
+        self.packet_states.sort_by(|a, b| a.1.cmp(&b.1));
+    }
+
+    pub fn add_packet(&mut self, name: &'static str, arrive_time: usize) {
+        self.packet_states
+            .push((Packet::new(name, self.packet_len), arrive_time));
+        self.ensure_packet_order();
+    }
 }
 
 impl Flow for FixedLengthFlow {
@@ -85,11 +106,10 @@ impl Flow for FixedLengthFlow {
                 ..packet
             };
             self.packet_states.push((packet, time));
-            self.packet_states.sort_by(|a, b| a.1.cmp(&b.1));
         } else {
             self.packet_states.push((packet, time));
-            self.packet_states.sort_by(|a, b| a.1.cmp(&b.1));
         }
+        self.ensure_packet_order();
     }
 
     fn pop_packet(&mut self) -> Packet {
@@ -99,13 +119,10 @@ impl Flow for FixedLengthFlow {
     fn peek_packet(&self, time: usize) -> Option<Packet> {
         if let Some((packet, arrive_time)) = self.packet_states.first() {
             if arrive_time <= &time {
-                Some(packet.clone())
-            } else {
-                None
+                return Some(packet.clone());
             }
-        } else {
-            None
         }
+        None
     }
 
     fn empty(&self) -> bool {

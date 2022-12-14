@@ -15,6 +15,7 @@ use tui::{
     Terminal,
 };
 
+#[allow(unused)]
 mod scheduling;
 
 fn main() -> Result<(), io::Error> {
